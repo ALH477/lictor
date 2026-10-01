@@ -32,14 +32,15 @@ coverage_severity = "warning"
 # (CLAUDE.md, "The compiler is freestanding") and its own command_allow
 # are closed: these are the exact commands the claims below run, spelled
 # out in full argv, nothing more. Every one of these was actually run
-# during M5's own verification pass (see the M5 report for the pasted
-# output); `nix build .#default` is listed here as a command the gate is
-# *permitted* to run for a future claim, not a claim that it currently
-# succeeds -- see the M5 report's "deviations" for the pre-existing build
-# failure (missing `git` in the package's checkPhase sandbox) this
-# uncovered, which is independent of anything M5 added.
+# during this repo's own verification. The build failure M5 uncovered (the
+# package's check phase had no git, which the overlay tests need) is fixed,
+# so `nix build .#default` is a command the gate may run, not a known-red
+# one.
 command_allow = [
   ["nix", "develop", "-c", "pytest", "-q"],
+  # The version print, which is also the cheapest proof the package's own
+  # entry point imports and finds the claude binary at all.
+  ["nix", "develop", "-c", "python", "-m", "lictor", "--version"],
   ["nix", "build", ".#default"],
   ["./result/bin/lictor", "--version"],
   ["nix", "flake", "check"],

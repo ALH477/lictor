@@ -28,7 +28,13 @@ and -- once `self.*` has redefined something -- whatever that redefined).
 Beyond Claude Code's own built-in tools (`Read`, `Edit`, `Bash`, and so on,
 fenced to the active git worktree by lictor's own hooks), lictor registers
 five tool namespaces, each its own in-process MCP server because an Agent
+<!-- truth:claim
+id: doc-architecture
+kind: file_exists
+path: docs/architecture.md
+-->
 SDK tool name cannot contain a dot (`docs/architecture.md` explains why):
+<!-- truth:end -->
 
 - **`exs.*`** -- gated, journalled entry points into the Exsecutor
   workspace's own build/test/spec tooling: `exs.build`, `exs.test`,
@@ -40,7 +46,13 @@ SDK tool name cannot contain a dot (`docs/architecture.md` explains why):
 - **`self.*`** -- inspects and redefines lictor's own running image:
   `status`, `describe`, `redefine`, `diff`, `exercise`, `discard`,
   `commit`, `persist_definition`, `set`, `apropos`. See
+<!-- truth:claim
+id: doc-mutations
+kind: file_exists
+path: docs/mutations.md
+-->
   `docs/mutations.md` for the full pipeline.
+<!-- truth:end -->
 - **`py.*`** -- isolated, persistent Python worker REPLs in separate OS
   processes that import nothing from lictor itself (`docs/architecture.md`,
   "the boundary that matters"): `eval`, `start`, `stop`, `repls`, `reset`.
@@ -51,7 +63,13 @@ SDK tool name cannot contain a dot (`docs/architecture.md` explains why):
   `workspace:<relpath>`, `inference:<trace-id>`, `session:<cid>`,
   `vault:current`.
 
+<!-- truth:claim
+id: roles-file
+kind: file_exists
+path: lictor/roles.py
+-->
 Programmatic subagent **roles** (`lictor/roles.py`) load from Markdown
+<!-- truth:end -->
 front-matter files and are passed to the SDK as `ClaudeAgentOptions(agents=
 ...)`, reachable from a turn via `!prompt("...", to="role-name")`. Two
 example roles ship, documented rather than auto-loaded, under
@@ -65,10 +83,22 @@ actually load it.
 
 Install and run via the flake:
 
-```
+```sh truth:ignore
 nix build .#default
 ./result/bin/lictor --version
 ./result/bin/lictor
+```
+
+Two of those three are measured rather than asserted. The build and the
+version print are gated claims; the bare `lictor` needs a terminal, so it
+is shown, not checked.
+
+```sh truth:id=version-print truth:kind=command truth:expect_exit=0 truth:expect_stdout=~/lictor:\s0\.1\.0/
+nix develop -c python -m lictor --version
+```
+
+```sh truth:id=suite truth:kind=command truth:expect_exit=0 truth:expect_stdout=~/passed/
+nix develop -c pytest -q
 ```
 
 `lictor --once "some prose"` runs exactly one turn non-interactively and
@@ -117,7 +147,13 @@ matters: `py.*` workers cannot touch lictor's own image, `self.*` is the
 only thing that can, and why those two tools being shaped so differently
 is deliberate rather than an oversight.
 
+<!-- truth:claim
+id: doc-records
+kind: file_exists
+path: docs/records.md
+-->
 `docs/records.md` is the append-only conversation record: every JSONL
+<!-- truth:end -->
 `kind` and its fields, the exact fsync ordering a crash can interrupt
 (and the bound on what it can lose), where a long tool result spills to
 an artifact file, and how a lictor conversation id relates to -- and can
@@ -131,18 +167,36 @@ refused, and -- derived by reading every call site in the tree rather
 than assumed -- exactly which functions a `fn:` redefine can and cannot
 actually change the behavior of.
 
+<!-- truth:claim
+id: doc-evidence
+kind: file_exists
+path: docs/evidence.md
+-->
 `docs/evidence.md` is the house rule this project holds itself to, and
+<!-- truth:end -->
 where it came from: Exsecutor's own `CLAUDE.md`, applied here with the
 same markers (`[OPEN]`, `[UNTESTED]`, `[UNREPRODUCED]`) and the same
 refusal to report a test not watched passing or a number not just
 measured. The Evidence section immediately below is the ledger that rule
+<!-- truth:claim
+id: gate-policy
+kind: file_exists
+path: .trvthnvke.toml
+-->
 produces; `.trvthnvke.toml` is what is meant to keep that ledger from
+<!-- truth:end -->
 drifting once the tool is wired in (see that section's own note on its
 current, unarmed state).
 
 ## Evidence
 
+<!-- truth:claim
+id: probe-file
+kind: file_exists
+path: scripts/m0_auth_probe.py
+-->
 - **M0 auth probe passed, 2026-10-01** (`scripts/m0_auth_probe.py`, run via `nix develop -c python scripts/m0_auth_probe.py` from inside a Claude Code session with the script's own scrub of `CLAUDE_CODE_*`, `CLAUDECODE`, `CLAUDE_PID`, `CLAUDE_EFFORT`, `ANTHROPIC_API_KEY`; no API key exists on the machine): `claude` 2.1.266 answered `pong`, `init: model=claude-opus-5[1m]`, `result subtype: success`, `is_error: False`, `num_turns: 1`. The reported `total_cost_usd: 0.00306` is Claude Code's client-side estimate, not a bill. SDK 0.2.163.
+<!-- truth:end -->
 - **M1 one real turn, 2026-10-01**: `python -m lictor --once` streamed a prose turn and wrote `meta`, `prompt`, `assistant_text`, `result` to the conversation record. Interactive Ctrl-C is [UNTESTED]: there was no tty.
 - **M2 exercised against the real Exsecutor tree, 2026-10-01**: `exs.spec` sliced §13 at lines 2869-3059 of `docs/spec/exsecutor-spec-v0.4.md`, and `exs.codes` reported `EXS-E0103` as "bidi or invisible control character in source" and present in `compiler/x86_64/diag/codes.inc`. In a live turn the model called `mcp__exs__codes` and answered from it.
 - **M4 `py.*` against real children, 2026-10-01**: namespace persisted across evals, a `NameError` returned as data, `while True: pass` was killed by process group and the next eval restarted the worker, and the child environment carried no `CLAUDE_CODE_*` variables.

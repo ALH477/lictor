@@ -14,6 +14,32 @@ A worker that overruns its timeout is killed by process group
 (``os.killpg``, so a child the user's code itself forked dies too),
 marked dead, and silently restarted -- with a note saying so -- the
 next time anyone calls ``eval`` on that name.
+
+**Sandboxing (M6) and what it does to ``os.killpg``.** Every worker's
+argv is routed through ``sandbox.wrap`` (no network, host read-only,
+workspace + lictor state dir writable -- see ``lictor/sandbox.py`` for
+the full policy and why ``py.*`` is sandboxed while ``exs.*`` is not).
+When that wrapping is active, the process asyncio actually spawns is
+`bwrap`, not `python` directly, and `bwrap` internally forks an *inner*
+monitor process that ends up in a **different, second process group**
+from the outer `bwrap` invocation -- confirmed empirically on this
+machine (bubblewrap 0.11.2): spawning `bwrap --unshare-pid ... -- sleep
+100` with `start_new_session=True` and inspecting `ps` shows the outer
+`bwrap` in pgid P (matching `os.getpgid` of the spawned pid, as before)
+and a second `bwrap` + the sandboxed command itself in a *different*
+pgid, one level down. `os.killpg(P, SIGKILL)` -- the existing call below
+-- therefore does **not** directly signal the sandboxed command; it only
+directly kills the outer `bwrap`. What makes the kill still reach the
+sandboxed process tree is `--die-with-parent`, which `sandbox.wrap`
+always includes: with it, killing the outer `bwrap` cascades to the
+inner monitor and the sandboxed command (confirmed: the whole tree
+disappears from `ps` within the same tick). Without `--die-with-parent`
+(tested by removing just that flag), the inner `bwrap` + sandboxed
+command survive, reparented to pid 1, orphaned. So the existing
+`os.killpg` call needed **no code change** -- but it is now correct only
+*because* `sandbox.wrap` never omits `--die-with-parent`; if that flag
+were ever dropped from the sandbox policy, timeout-kill would silently
+stop reaping sandboxed workers.
 """
 
 from __future__ import annotations
@@ -28,6 +54,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import sandbox
 from .options import scrub_environ
 
 #: Used when a caller does not pass one.
@@ -62,6 +89,7 @@ class _Worker:
     name: str
     cwd: Path | None
     proc: asyncio.subprocess.Process
+    sandboxed: bool = False
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     alive: bool = True
     last_used: float = field(default_factory=time.time)
@@ -79,11 +107,36 @@ class WorkerManager:
 
     # -- spawning ---------------------------------------------------------
 
+    def _writable_paths(self, cwd: Path | None) -> tuple[Path, ...]:
+        """Paths a sandboxed worker needs write access to: the workspace
+        (so edits/scratch files under it work) and lictor's own state dir
+        (so a worker that shells back out to lictor-adjacent tooling can
+        still see it) -- plus the worker's own `cwd` if one was given and
+        it is not already one of those two, since a worker started in a
+        worktree needs to write there even though that path is normally
+        nested under the workspace anyway."""
+        seen: list[Path] = []
+        if self.state is not None and getattr(self.state, "workspace", None):
+            seen.append(Path(self.state.workspace))
+        if self.paths is not None and getattr(self.paths, "state", None):
+            seen.append(Path(self.paths.state))
+        if cwd is not None and cwd not in seen:
+            seen.append(cwd)
+        return tuple(seen)
+
     async def _spawn(self, name: str, cwd: Path | None) -> _Worker:
+        argv = [sys.executable, "-m", "lictor.worker_main"]
+        bwrap_path = sandbox.available()
+        sandbox_mode = sandbox.mode(self.cfg)
+        wrapped = sandbox.wrap(
+            argv,
+            writable=self._writable_paths(cwd),
+            network=False,
+            cfg=self.cfg,
+        )
+        sandboxed = sandbox_mode != "off" and bwrap_path is not None
         proc = await asyncio.create_subprocess_exec(
-            sys.executable,
-            "-m",
-            "lictor.worker_main",
+            *wrapped,
             cwd=str(cwd) if cwd else None,
             env=_scrubbed_env(),
             stdin=asyncio.subprocess.PIPE,
@@ -91,7 +144,7 @@ class WorkerManager:
             stderr=asyncio.subprocess.PIPE,
             start_new_session=True,  # its own process group, for killpg
         )
-        return _Worker(name=name, cwd=cwd, proc=proc)
+        return _Worker(name=name, cwd=cwd, proc=proc, sandboxed=sandboxed)
 
     async def start(self, name: str, cwd: str | Path | None = None) -> _Worker:
         existing = self._workers.get(name)
@@ -195,6 +248,7 @@ class WorkerManager:
                     "alive": worker.alive,
                     "last_used": worker.last_used,
                     "eval_count": worker.eval_count,
+                    "sandboxed": worker.sandboxed,
                 }
             )
         return rows

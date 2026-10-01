@@ -3,17 +3,16 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    # trvthnvke (README claim gate) is not an input yet -- .trvthnvke.toml
-    # (M5) is written against the real, working command allowlist, but the
-    # tool itself is [UNTESTED] end to end until this is added and the
-    # checks.readme output below (also commented, for the same reason) is
-    # enabled. Once trvthnvke is packaged as a flake (see
-    # github.com/ALH477/TrvthNvke), add it here, e.g.:
-    #
-    #   trvthnvke.url = "github:ALH477/TrvthNvke";
+    # The README claim gate. Every claim README.md makes about this repo is
+    # checked by this tool, so a sentence cannot outlive the behaviour it
+    # describes. Same gate the Exsecutor tree uses.
+    trvthnvke = {
+      url = "github:ALH477/TrvthNvke";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs }:
+  outputs = { self, nixpkgs, trvthnvke }:
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
@@ -86,27 +85,26 @@
           (python.withPackages (ps: [ sdk ps.pytest ps.pytest-asyncio ps.ruff ]))
           pkgs.git
           pkgs.bubblewrap
+          trvthnvke.packages.${system}.default
         ];
       };
 
-      # checks.readme -- [UNTESTED]: `trvthnvke` is not a flake input yet
-      # (see the `inputs` comment above), so this whole block is commented
-      # out rather than present-but-broken. .trvthnvke.toml (M5) already
-      # exists and is written against the real, working command allowlist;
-      # once `trvthnvke` is added as an input, uncomment this (the pattern
-      # mirrors Exsecutor's own `checks.readme`, flake.nix line ~617 there)
-      # and it becomes equivalent to running `trvthnvke verify --fail` by
-      # hand:
-      #
-      #   checks.${system}.readme = pkgs.runCommand "check-trvthnvke-readme" {
-      #     nativeBuildInputs = [ trvthnvke.packages.${system}.default ];
-      #     src = self;
-      #   } ''
-      #     cp -r "$src"/. .
-      #     chmod -R u+w .
-      #     trvthnvke verify --fail
-      #     mkdir -p "$out"
-      #     echo ok > "$out/receipt"
-      #   '';
+      # The README gate, as a flake check: `nix flake check` fails if a
+      # claim in README.md no longer holds. Mirrors Exsecutor's own
+      # checks.readme, and is equivalent to `trvthnvke verify --fail`.
+      checks.${system} = {
+        readme = pkgs.runCommand "check-trvthnvke-readme" {
+          nativeBuildInputs = [ trvthnvke.packages.${system}.default ];
+          src = self;
+        } ''
+          cp -r "$src"/. .
+          chmod -R u+w .
+          trvthnvke verify --fail
+          mkdir -p "$out"
+          echo ok > "$out/receipt"
+        '';
+        tests = lictor;
+      };
+
     };
 }

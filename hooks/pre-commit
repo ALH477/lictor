@@ -1,0 +1,26 @@
+#!/bin/sh
+# The README gate. Refuses a commit when a claim in README.md no longer
+# verifies. Install with:
+#   cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# or, with TrvthNvke on PATH, `trvthnvke install-hook` -- though that writes
+# upstream's two-branch hook, which ends in a ModuleNotFoundError traceback
+# when the tool is absent rather than a sentence.
+#
+# The tool is a flake input, so a commit made outside `nix develop` is still
+# gated: the third branch enters the shell for the one command. What this
+# hook never does is pass when it could not run. A gate that skips itself
+# when its tool is missing is the check that is never run, which is
+# indistinguishable from having no check at all.
+if command -v trvthnvke >/dev/null 2>&1; then
+  exec trvthnvke verify --fail
+fi
+if python3 -c 'import trvthnvke' >/dev/null 2>&1; then
+  exec python3 -m trvthnvke verify --fail
+fi
+if command -v nix >/dev/null 2>&1 && [ -f flake.nix ]; then
+  exec nix develop -c trvthnvke verify --fail
+fi
+echo "pre-commit: the README gate cannot run -- TrvthNvke is not installed." >&2
+echo "  Enter 'nix develop' and commit from there, or remove" >&2
+echo "  .git/hooks/pre-commit if you do not want the gate locally." >&2
+exit 1
