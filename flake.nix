@@ -94,7 +94,14 @@
       # checks.readme, and is equivalent to `trvthnvke verify --fail`.
       checks.${system} = {
         readme = pkgs.runCommand "check-trvthnvke-readme" {
-          nativeBuildInputs = [ trvthnvke.packages.${system}.default ];
+          # The gate runs the README's own command claims, so this
+          # derivation needs what those commands need: python with the SDK,
+          # pytest, and git for the overlay tests' private repository.
+          nativeBuildInputs = [
+            trvthnvke.packages.${system}.default
+            (python.withPackages (ps: [ sdk ps.pytest ps.pytest-asyncio ]))
+            pkgs.git
+          ];
           src = self;
         } ''
           cp -r "$src"/. .

@@ -94,11 +94,11 @@ version print are gated claims; the bare `lictor` needs a terminal, so it
 is shown, not checked.
 
 ```sh truth:id=version-print truth:kind=command truth:expect_exit=0 truth:expect_stdout=~/lictor:\s0\.1\.0/
-nix develop -c python -m lictor --version
+python -m lictor --version
 ```
 
 ```sh truth:id=suite truth:kind=command truth:expect_exit=0 truth:expect_stdout=~/passed/
-nix develop -c pytest -q
+pytest -q
 ```
 
 `lictor --once "some prose"` runs exactly one turn non-interactively and

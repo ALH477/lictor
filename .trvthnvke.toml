@@ -37,14 +37,17 @@ coverage_severity = "warning"
 # so `nix build .#default` is a command the gate may run, not a known-red
 # one.
 command_allow = [
-  ["nix", "develop", "-c", "pytest", "-q"],
-  # The version print, which is also the cheapest proof the package's own
-  # entry point imports and finds the claude binary at all.
-  ["nix", "develop", "-c", "python", "-m", "lictor", "--version"],
+  # Spelled without `nix develop` on purpose. The gate runs as a flake
+  # check too, inside a build sandbox that has no `nix` binary at all, so a
+  # claim that shells out to nix can pass by hand and fail in CI. These
+  # argvs work in both places: the dev shell puts python and pytest on
+  # PATH, and the readme check derivation brings its own.
+  ["python", "-m", "lictor", "--version"],
+  ["pytest", "-q"],
   ["nix", "build", ".#default"],
   ["./result/bin/lictor", "--version"],
   ["nix", "flake", "check"],
-  ["nix", "develop", "-c", "ruff", "check", "lictor", "tests"],
+  ["ruff", "check", "lictor", "tests"],
 ]
 
 [[docs]]
