@@ -22,13 +22,25 @@ from .repl import Command, ImageForm, Submission
 
 
 class App:
-    def __init__(self, cfg: Any, state: Any, records: Any, approvals: Any, brain: Any, renderer: Any) -> None:
+    def __init__(
+        self,
+        cfg: Any,
+        state: Any,
+        records: Any,
+        approvals: Any,
+        brain: Any,
+        renderer: Any,
+        image: Any = None,
+        vault: Any = None,
+    ) -> None:
         self.cfg = cfg
         self.state = state
         self.records = records
         self.approvals = approvals
         self.brain = brain
         self.renderer = renderer
+        self.image = image
+        self.vault = vault
         self.loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
 
@@ -82,13 +94,26 @@ class App:
         def _read_file(path: str) -> str:
             return Path(path).read_text(encoding="utf-8")
 
+        if self.image is not None:
+            # The live image owns the namespace once M3 is wired: it carries
+            # the registry and apropos, and self.redefine can replace what is
+            # in it. Keep prompt/read_file, which are the REPL's own verbs.
+            ns = dict(self.image.ns)
+            ns.setdefault("prompt", _prompt)
+            ns.setdefault("read_file", _read_file)
+            return ns
         return {"prompt": _prompt, "read_file": _read_file, "state": self.state, "cfg": self.cfg}
 
     def run(self) -> int:
         import readline
 
+        from . import recovery as recovery_mod
+
         self.start_loop()
         self.wait_turn(self.call(self.brain.start(resume=self.state.claude_session)))
+        # The session connected and a prompt is about to appear: this boot
+        # got far enough that the next one need not come up in recovery.
+        recovery_mod.mark_booted(self.records.paths)
 
         history_path = self._history_path()
         try:
@@ -187,7 +212,8 @@ class App:
 
         if name == "help":
             print("/help /quit /status /model M /effort E /mode M /resume ID /sessions /cost")
-            print("(every other command is not available until a later wave)")
+            print("/generations /rollback N /diff [target] /commit MSG /discard T /tools")
+            print("/vault /vault-restore /vault-discard /trace ID")
             return True
 
         if name == "status":
@@ -234,10 +260,102 @@ class App:
                   "(wave 1 keeps no running total yet)")
             return True
 
+        if name == "tools":
+            registry = getattr(self.brain, "registry", None)
+            if registry is None:
+                print("tools: no registry in this session")
+                return True
+            for dotted in sorted(registry.tools):
+                print(f"{dotted}  ({registry.wire_id(dotted)})")
+            return True
+
+        if name in ("generations", "rollback", "diff", "commit", "discard"):
+            return self._generation_command(name, cmd.args.strip())
+
+        if name in ("vault", "vault-restore", "vault-discard"):
+            return self._vault_command(name)
+
+        if name == "trace":
+            trace_id = cmd.args.strip()
+            path = self.records.paths.data / "inferences" / f"{trace_id}.json"
+            print(path.read_text(encoding="utf-8") if path.exists() else f"trace: no {trace_id}")
+            return True
+
         if name in repl.ALL_COMMANDS:
             print(f"/{name}: not available until a later wave")
         else:
             print(f"/{name}: unknown command (lead with a space to send literal text as prose)")
+        return True
+
+    # -- generations, tools and the vault ---------------------------------
+
+    def _generation_command(self, name: str, arg: str) -> bool:
+        from . import overlay as overlay_mod
+
+        paths = self.records.paths
+        if name == "generations":
+            active = overlay_mod.active_generation(paths)
+            rows = overlay_mod.generations(paths)
+            if not rows:
+                print("no generations yet; redefine something and /commit it")
+            for row in rows:
+                mark = "*" if row.get("gen") == active else " "
+                print(f"{mark} {row.get('gen')}  {row.get('created')}  "
+                      f"seqs={row.get('overlay_seqs')}  {row.get('note') or ''}")
+            return True
+
+        if name == "rollback":
+            if not arg.isdigit():
+                print("/rollback N  (see /generations)")
+                return True
+            print(overlay_mod.rollback(paths, int(arg)))
+            return True
+
+        if self.image is None:
+            print(f"/{name}: no live image in this session")
+            return True
+
+        # /diff, /commit and /discard are the self.* tools the model uses,
+        # reached from the prompt. One implementation, one tested path.
+        registry = getattr(self.brain, "registry", None)
+        if registry is None:
+            print(f"/{name}: no registry in this session")
+            return True
+        wanted = {"diff": ("self.diff", "target"),
+                  "commit": ("self.commit", "message"),
+                  "discard": ("self.discard", "target_or_seq")}[name]
+        dotted, field = wanted
+        if not arg:
+            print({"diff": "/diff tool:<ns>.<name>",
+                   "commit": "/commit MESSAGE",
+                   "discard": "/discard <target|seq>"}[name])
+            return True
+        handler = registry.tools[dotted].handler
+        result = self.wait_turn(self.call(handler({field: arg})))
+        for block in result.get("content", []):
+            if block.get("type") == "text":
+                print(block["text"])
+        return True
+
+    def _vault_command(self, name: str) -> bool:
+        if self.vault is None:
+            print(f"/{name}: no vault in this session")
+            return True
+        if name == "vault":
+            items = self.vault.items()
+            if not items:
+                print("vault: empty")
+            for item in items:
+                print(f"{item['id']}  {item['status']}  {item['text'][:60]!r}")
+            return True
+        if name == "vault-restore":
+            for item in self.vault.restore_order():
+                print(f"restoring {item['id']}")
+                self._run_turn(Submission(item["text"], to=item.get("to"), source="restored"))
+                self.vault.done(item["id"])
+            return True
+        self.vault.discard_all()
+        print("vault: discarded")
         return True
 
     # -- non-interactive single turn --------------------------------------

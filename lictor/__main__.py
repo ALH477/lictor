@@ -48,6 +48,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--effort", help="override the configured effort level")
     parser.add_argument("--mode", help="override the configured permission mode")
     parser.add_argument(
+        "--recovery",
+        action="store_true",
+        help="boot with no overlay and no user init, to diagnose a broken image",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="start even though CLAUDE_CODE_MESSAGING_SOCKET indicates a nested Claude Code session",
@@ -144,18 +149,50 @@ def main(argv: list[str] | None = None) -> int:
     renderer = Renderer()
 
     from lictor import hooks as hooks_mod
+    from lictor import overlay as overlay_mod
+    from lictor import recovery as recovery_mod
+    from lictor.image import Image
     from lictor.tools import ToolContext
     from lictor.tools import load as load_tools
+    from lictor.vault import Vault
+
+    # Was the last boot's marker left in the starting phase? Then that
+    # process died before it ever reached a prompt, and this one comes up
+    # without the overlay that may have killed it.
+    decision = recovery_mod.decide_boot(paths, args.recovery)
+    generation = 0 if decision.recovery else overlay_mod.active_generation(paths)
+    recovery_mod.write_starting(paths, generation)
+    recovery_mod.install(paths)
 
     tool_ctx = ToolContext(cfg=cfg, state=state, records=records, paths=paths)
     registry = load_tools(tool_ctx)
+    image = Image(cfg, state, records, paths, registry)
+    tool_ctx.image = image
     session_hooks = hooks_mod.build_hooks(tool_ctx)
+    vault = Vault(paths, cid)
+    tool_ctx.workers = None
+    tool_ctx.budget = None
+
+    replayed = None
+    if decision.recovery:
+        print(f"· recovery boot: {decision.reason}")
+        if decision.crash_summary:
+            print(f"· last crash: {decision.crash_summary}")
+        if decision.crash_path:
+            print(f"· crash file: {decision.crash_path}")
+    elif generation:
+        manifest = next(
+            (g for g in overlay_mod.generations(paths) if g.get("gen") == generation), {}
+        )
+        replayed = overlay_mod.replay(paths, manifest.get("overlay_seqs", []), registry)
+        for skip in replayed.skipped:
+            print(f"· overlay seq {skip.seq} ({skip.target}) skipped: {skip.message}")
 
     brain = Brain(
         cfg, state, records, approvals, renderer,
         registry=registry, hooks=session_hooks,
     )
-    app = App(cfg, state, records, approvals, brain, renderer)
+    app = App(cfg, state, records, approvals, brain, renderer, image=image, vault=vault)
     tool_ctx.app = app
 
     print(
@@ -163,11 +200,20 @@ def main(argv: list[str] | None = None) -> int:
         f"· workspace {workspace} · cid {cid}"
     )
     print(f"· tools {len(registry.tools)} in {len(registry.namespaces())} namespaces")
+    if generation:
+        applied = len(replayed.applied) if replayed is not None else 0
+        print(f"· generation {generation}, {applied} overlay entr"
+              f"{'y' if applied == 1 else 'ies'} applied")
+    summary = vault.summary()
+    if summary:
+        print(f"· vault: {summary} -- /vault, /vault-restore, /vault-discard")
 
-    if args.once is not None:
-        return app.run_once(args.once)
-
-    return app.run()
+    try:
+        if args.once is not None:
+            return app.run_once(args.once)
+        return app.run()
+    finally:
+        recovery_mod.clear(paths)
 
 
 if __name__ == "__main__":
