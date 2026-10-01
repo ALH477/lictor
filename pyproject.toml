@@ -32,3 +32,12 @@ packages = ["lictor"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 pythonpath = ["."]
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint.per-file-ignores]
+# The env scrub in main() must run before any import that reaches
+# claude_agent_sdk, so lictor-local imports are deliberately deferred to
+# after it rather than sitting at module level.
+"lictor/__main__.py" = ["E402"]
