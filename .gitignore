@@ -1,0 +1,7 @@
+result
+result-*
+__pycache__/
+*.pyc
+.direnv/
+.pytest_cache/
+.ruff_cache/
