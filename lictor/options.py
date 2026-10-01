@@ -58,13 +58,24 @@ class State:
 #: mcp__<ns>__* tools a later wave adds.
 BASE_ALLOWED_TOOLS = ["Read", "Glob", "Grep", "TodoWrite", "Agent", "WebFetch"]
 
+#: lictor tools that are never auto-approved, however they were registered.
+#: An ``allowed_tools`` entry auto-approves a tool *before* ``can_use_tool``
+#: is consulted, so anything here must be left out of that list to fall
+#: through to an approval prompt. Reading and running the repo's own gates is
+#: fine unattended; creating or removing a git worktree is not.
+NEVER_AUTO_ALLOW = frozenset({"mcp__exs__worktree"})
+
 _PROMPT_PATH = Path(__file__).parent / "prompts" / "lictor.md"
 
 
-def _system_prompt_append(state: State) -> str:
+def _system_prompt_append(state: State, tool_summary: str | None = None) -> str:
     base = _PROMPT_PATH.read_text(encoding="utf-8")
     worktree = str(state.active_worktree) if state.active_worktree else "none"
-    return f"{base}\n\nWorkspace: {state.workspace}\nActive worktree: {worktree}\n"
+    tools = tool_summary or "none registered in this session"
+    return (
+        f"{base}\n\nWorkspace: {state.workspace}\nActive worktree: {worktree}\n"
+        f"\nlictor tools registered in this session: {tools}\n"
+    )
 
 
 def build_options(
@@ -77,6 +88,7 @@ def build_options(
     mcp_servers: Any = None,
     can_use_tool: Callable[..., Any] | None = None,
     extra_allowed_tools: list[str] | None = None,
+    tool_summary: str | None = None,
 ) -> Any:
     """Build a ``ClaudeAgentOptions`` for ``cfg``/``state``.
 
@@ -92,13 +104,13 @@ def build_options(
 
     allowed_tools = list(BASE_ALLOWED_TOOLS)
     if extra_allowed_tools:
-        allowed_tools.extend(extra_allowed_tools)
+        allowed_tools.extend(t for t in extra_allowed_tools if t not in NEVER_AUTO_ALLOW)
 
     kwargs: dict[str, Any] = {
         "system_prompt": {
             "type": "preset",
             "preset": "claude_code",
-            "append": _system_prompt_append(state),
+            "append": _system_prompt_append(state, tool_summary),
         },
         "setting_sources": cfg.claude.setting_sources,
         "cwd": str(state.cwd),

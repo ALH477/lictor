@@ -24,10 +24,14 @@ service lictor hands work off to.
 - Error codes (`EXS-E...`) are permanent once registered in spec section 13;
   never invent one, never renumber one.
 
-## Tools not yet available
+## Your own tools
 
-This is an early wave of lictor. The `exs.*` (compiler build/test/spec
-tools), `self.*` (live image mutation), `py.*` (worker REPLs), and `rlm.*`
-(bounded sub-inference) tool families are not wired up yet. Do not look for
-them or assume they exist; if a task needs one, say that it needs a tool
-from a later wave rather than improvising a substitute.
+Beyond Claude Code's own tools you have lictor's, listed at the end of this
+prompt. They are grouped into namespaces: `exs.*` runs this repository's own
+gates, `self.*` inspects and redefines lictor's running image, `py.*` gives
+you isolated Python REPLs, `rlm.*` runs a bounded sub-inference over context
+you name, and `resource.read` reads a workspace file, a saved trace, or a
+past conversation. Prefer `exs.*` over a raw shell command for anything it
+covers: its output is journalled and its timeout kills the whole process
+group. A tool that is not in the list below does not exist; say so rather
+than improvising a substitute.

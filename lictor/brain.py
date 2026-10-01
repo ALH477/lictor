@@ -55,6 +55,8 @@ class Brain:
         approvals: Any,
         renderer: Any,
         transport_factory: Callable[[Any], Any] | None = None,
+        registry: Any = None,
+        hooks: Any = None,
     ) -> None:
         self.cfg = cfg
         self.state = state
@@ -62,17 +64,29 @@ class Brain:
         self.approvals = approvals
         self.renderer = renderer
         self.transport_factory = transport_factory
+        self.registry = registry
+        self.hooks = hooks
         self.client: ClaudeSDKClient | None = None
 
     def _build_options(self, *, resume: str | None) -> Any:
         fresh_cid = None if resume else self.state.cid
         can_use_tool = self.approvals.can_use_tool if self.approvals is not None else None
+        # One in-process MCP server per namespace; a rebind by self.redefine
+        # is visible through a server that already exists, so the servers are
+        # built once here and not rebuilt per turn.
+        mcp_servers = self.registry.servers() if self.registry is not None else None
+        extra_allowed = self.registry.tool_ids() if self.registry is not None else None
+        tool_summary = ", ".join(sorted(self.registry.tools)) if self.registry is not None else None
         return options_mod.build_options(
             self.cfg,
             self.state,
             resume=resume,
             fresh_cid=fresh_cid,
             can_use_tool=can_use_tool,
+            hooks=self.hooks,
+            mcp_servers=mcp_servers,
+            extra_allowed_tools=extra_allowed,
+            tool_summary=tool_summary,
         )
 
     async def start(self, resume: str | None = None) -> None:

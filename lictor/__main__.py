@@ -142,13 +142,27 @@ def main(argv: list[str] | None = None) -> int:
 
     approvals = Approvals()
     renderer = Renderer()
-    brain = Brain(cfg, state, records, approvals, renderer)
+
+    from lictor import hooks as hooks_mod
+    from lictor.tools import ToolContext
+    from lictor.tools import load as load_tools
+
+    tool_ctx = ToolContext(cfg=cfg, state=state, records=records, paths=paths)
+    registry = load_tools(tool_ctx)
+    session_hooks = hooks_mod.build_hooks(tool_ctx)
+
+    brain = Brain(
+        cfg, state, records, approvals, renderer,
+        registry=registry, hooks=session_hooks,
+    )
     app = App(cfg, state, records, approvals, brain, renderer)
+    tool_ctx.app = app
 
     print(
         f"lictor {__version__} · claude {claude_version} · sdk {sdk_version} "
         f"· workspace {workspace} · cid {cid}"
     )
+    print(f"· tools {len(registry.tools)} in {len(registry.namespaces())} namespaces")
 
     if args.once is not None:
         return app.run_once(args.once)

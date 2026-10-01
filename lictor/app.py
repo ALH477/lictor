@@ -166,7 +166,16 @@ class App:
             print(repr(result))
 
     def _run_turn(self, sub: Submission) -> Any:
-        return self.wait_turn(self.call(self.brain.submit(sub)))
+        worktree_before = self.state.active_worktree
+        summary = self.wait_turn(self.call(self.brain.submit(sub)))
+        if self.state.active_worktree != worktree_before:
+            # exs.worktree(op="new") moved state.cwd into a fresh worktree from
+            # inside a tool handler, which cannot reconnect the session itself.
+            # Reconnect now, resumed at the same Claude session, so the next
+            # turn's own Read/Edit/Bash see the worktree the fence enforces.
+            print(f"· reconnecting into worktree {self.state.active_worktree}")
+            self.wait_turn(self.call(self.brain.reconnect(cwd=self.state.active_worktree)))
+        return summary
 
     def _dispatch_command(self, cmd: Command) -> bool:
         """Returns False to stop the REPL loop (``/quit``)."""
