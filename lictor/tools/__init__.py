@@ -58,7 +58,7 @@ class ToolContext:
     records: Any
     paths: Any
     app: Any = None
-    registry: "ToolRegistry | None" = None
+    registry: ToolRegistry | None = None
     image: Any = None
     workers: Any = None
     budget: Any = None
