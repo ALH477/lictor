@@ -57,6 +57,7 @@ class Brain:
         transport_factory: Callable[[Any], Any] | None = None,
         registry: Any = None,
         hooks: Any = None,
+        agents: Any = None,
     ) -> None:
         self.cfg = cfg
         self.state = state
@@ -66,6 +67,7 @@ class Brain:
         self.transport_factory = transport_factory
         self.registry = registry
         self.hooks = hooks
+        self.agents = agents
         self.client: ClaudeSDKClient | None = None
 
     def _build_options(self, *, resume: str | None) -> Any:
@@ -87,6 +89,7 @@ class Brain:
             mcp_servers=mcp_servers,
             extra_allowed_tools=extra_allowed,
             tool_summary=tool_summary,
+            agents=self.agents,
         )
 
     async def start(self, resume: str | None = None) -> None:

@@ -89,6 +89,7 @@ def build_options(
     can_use_tool: Callable[..., Any] | None = None,
     extra_allowed_tools: list[str] | None = None,
     tool_summary: str | None = None,
+    agents: dict[str, Any] | None = None,
 ) -> Any:
     """Build a ``ClaudeAgentOptions`` for ``cfg``/``state``.
 
@@ -96,6 +97,12 @@ def build_options(
     ``resume`` continues an existing Claude session id, ``fresh_cid`` starts
     a new one pinned to that id so lictor's conversation id and the
     underlying Claude session id agree from turn one.
+
+    ``agents``, when not ``None``, is passed straight through as
+    ``ClaudeAgentOptions(agents=...)`` -- a ``dict[str, AgentDefinition]``
+    as built by :func:`lictor.roles.load`. ``None`` (the default) omits the
+    keyword entirely rather than passing an empty dict, matching how every
+    other optional collection here (``hooks``, ``mcp_servers``) behaves.
     """
     from claude_agent_sdk import ClaudeAgentOptions
 
@@ -128,6 +135,8 @@ def build_options(
         kwargs["mcp_servers"] = mcp_servers
     if can_use_tool is not None:
         kwargs["can_use_tool"] = can_use_tool
+    if agents is not None:
+        kwargs["agents"] = agents
 
     if resume:
         kwargs["resume"] = resume

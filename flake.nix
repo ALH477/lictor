@@ -3,9 +3,14 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    # trvthnvke (README claim gate) and checks.readme land in a later wave,
-    # once lictor has a README with claims worth gating. See CLAUDE.md-style
-    # gate used by Exsecutor for the pattern this will follow.
+    # trvthnvke (README claim gate) is not an input yet -- .trvthnvke.toml
+    # (M5) is written against the real, working command allowlist, but the
+    # tool itself is [UNTESTED] end to end until this is added and the
+    # checks.readme output below (also commented, for the same reason) is
+    # enabled. Once trvthnvke is packaged as a flake (see
+    # github.com/ALH477/TrvthNvke), add it here, e.g.:
+    #
+    #   trvthnvke.url = "github:ALH477/TrvthNvke";
   };
 
   outputs = { self, nixpkgs }:
@@ -56,6 +61,11 @@
         nativeCheckInputs = [
           python.pkgs.pytestCheckHook
           python.pkgs.pytest-asyncio
+          # tests/test_overlay.py commits to the private mutation repository,
+          # so the check phase needs git even though the runtime wrapper
+          # already puts it on PATH. Without it the package stopped building
+          # the moment M3's overlay tests landed.
+          pkgs.git
         ];
 
         makeWrapperArgs = [
@@ -78,5 +88,25 @@
           pkgs.bubblewrap
         ];
       };
+
+      # checks.readme -- [UNTESTED]: `trvthnvke` is not a flake input yet
+      # (see the `inputs` comment above), so this whole block is commented
+      # out rather than present-but-broken. .trvthnvke.toml (M5) already
+      # exists and is written against the real, working command allowlist;
+      # once `trvthnvke` is added as an input, uncomment this (the pattern
+      # mirrors Exsecutor's own `checks.readme`, flake.nix line ~617 there)
+      # and it becomes equivalent to running `trvthnvke verify --fail` by
+      # hand:
+      #
+      #   checks.${system}.readme = pkgs.runCommand "check-trvthnvke-readme" {
+      #     nativeBuildInputs = [ trvthnvke.packages.${system}.default ];
+      #     src = self;
+      #   } ''
+      #     cp -r "$src"/. .
+      #     chmod -R u+w .
+      #     trvthnvke verify --fail
+      #     mkdir -p "$out"
+      #     echo ok > "$out/receipt"
+      #   '';
     };
 }

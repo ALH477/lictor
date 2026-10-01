@@ -1,0 +1,59 @@
+# Policy for lictor's own claim-gated README, enforced by TrvthNvke
+# (github.com/ALH477/TrvthNvke) -- the user's default claim-gating tool for
+# their own repos (see docs/evidence.md: "the TrvthNvke gate is what keeps
+# the Evidence ledger honest").
+#
+# Modelled on /home/asher/Documents/EXSECUTOR/.trvthnvke.toml, adapted to
+# this repo's own schema -- lictor's README does not carry the fenced,
+# measured-prose-fragment claims Exsecutor's does (no emitted-unit sizes,
+# no fixture floors); its Evidence section's claims are command-shaped
+# instead (a build, a version print, a test run), so they are declared
+# below as `command` claims against the allowlist, not inline fences.
+#
+# IMPORTANT, as of this milestone (M5): `trvthnvke` is not installed in
+# this flake yet, and no `.trvthnvke.lock` exists -- this policy has never
+# actually been run. It is [UNTESTED] end to end. See docs/evidence.md and
+# the M5 report for the exact steps to arm it: `nix develop`, then
+# `trvthnvke extract`, `trvthnvke lock`, `trvthnvke verify --fail`, once
+# `trvthnvke` is added as a flake input (flake.nix carries a commented
+# placeholder for the `checks.readme` expression to enable at that point).
+
+[policy]
+fail_on = "error"
+command_mode = "allowlist"
+require_lock = true
+lock_path = ".trvthnvke.lock"
+require_entailment = true
+strict_ignore = true
+coverage = "paths"
+coverage_severity = "warning"
+
+# Closed on purpose, the same way Exsecutor's own syscall allowlist
+# (CLAUDE.md, "The compiler is freestanding") and its own command_allow
+# are closed: these are the exact commands the claims below run, spelled
+# out in full argv, nothing more. Every one of these was actually run
+# during M5's own verification pass (see the M5 report for the pasted
+# output); `nix build .#default` is listed here as a command the gate is
+# *permitted* to run for a future claim, not a claim that it currently
+# succeeds -- see the M5 report's "deviations" for the pre-existing build
+# failure (missing `git` in the package's checkPhase sandbox) this
+# uncovered, which is independent of anything M5 added.
+command_allow = [
+  ["nix", "develop", "-c", "pytest", "-q"],
+  ["nix", "build", ".#default"],
+  ["./result/bin/lictor", "--version"],
+  ["nix", "flake", "check"],
+  ["nix", "develop", "-c", "ruff", "check", "lictor", "tests"],
+]
+
+[[docs]]
+path = "README.md"
+require_bound_fences = true
+required_headings = [
+  "What it does",
+  "Running it",
+  "Design",
+  "Evidence",
+  "Terms",
+  "License",
+]
