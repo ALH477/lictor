@@ -151,7 +151,7 @@ def test_real_sandbox_can_read_store_and_run_python(tmp_path) -> None:
     if --ro-bind / / did not leave it readable, this would fail to start
     at all rather than print anything."""
     argv = sandbox.wrap([sys.executable, "-c", "print('ok')"], writable=(tmp_path,), cfg=Config())
-    proc = subprocess.run(argv, capture_output=True, text=True, timeout=10)
+    proc = subprocess.run(argv, capture_output=True, text=True, timeout=10, check=False)
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.strip() == "ok"
 
@@ -161,7 +161,7 @@ def test_real_sandbox_can_write_under_writable_path(tmp_path) -> None:
     target = tmp_path / "ok.txt"
     code = f"open({str(target)!r}, 'w').write('hi')"
     argv = sandbox.wrap([sys.executable, "-c", code], writable=(tmp_path,), cfg=Config())
-    proc = subprocess.run(argv, capture_output=True, text=True, timeout=10)
+    proc = subprocess.run(argv, capture_output=True, text=True, timeout=10, check=False)
     assert proc.returncode == 0, proc.stderr
     assert target.read_text() == "hi"
 
@@ -170,7 +170,7 @@ def test_real_sandbox_can_write_under_writable_path(tmp_path) -> None:
 def test_real_sandbox_cannot_write_outside_writable_path(tmp_path) -> None:
     code = "open('/etc/lictor-should-not-exist', 'w')"
     argv = sandbox.wrap([sys.executable, "-c", code], writable=(tmp_path,), cfg=Config())
-    proc = subprocess.run(argv, capture_output=True, text=True, timeout=10)
+    proc = subprocess.run(argv, capture_output=True, text=True, timeout=10, check=False)
     assert proc.returncode != 0
     assert "Read-only file system" in proc.stderr
 
@@ -179,7 +179,7 @@ def test_real_sandbox_cannot_write_outside_writable_path(tmp_path) -> None:
 def test_real_sandbox_cannot_open_socket(tmp_path) -> None:
     code = "import socket; socket.create_connection(('1.1.1.1', 53), timeout=2)"
     argv = sandbox.wrap([sys.executable, "-c", code], writable=(tmp_path,), cfg=Config())
-    proc = subprocess.run(argv, capture_output=True, text=True, timeout=10)
+    proc = subprocess.run(argv, capture_output=True, text=True, timeout=10, check=False)
     assert proc.returncode != 0
     assert "Network is unreachable" in proc.stderr
 

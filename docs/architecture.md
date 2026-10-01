@@ -172,3 +172,44 @@ isolation -- it is the overlay journal's own pipeline (see
 touch `mutations.git`. `py.*`'s isolation is a process boundary; `self.*`'s
 is a review-before-commit pipeline, because the entire point of `self.*`
 is that it is allowed to cross the boundary `py.*` is built to never reach.
+
+## The sandbox
+
+M6 (`lictor/sandbox.py`) adds a second, orthogonal layer of isolation on
+top of the process boundary above, and applies it to exactly one kind of
+subprocess: **`py.*` workers**, never `exs.*`.
+
+The reasoning is the same boundary statement as above, read the other
+direction. A `py.*` worker is where untrusted, model-generated code runs
+-- it already cannot reach lictor's own process, but until M6 it could
+still reach the *host*: read any file the OS user could read, write
+anywhere that user could write, open a socket. `sandbox.wrap` closes that
+off by routing the worker's argv through `bwrap` (bubblewrap): the host
+filesystem is bound read-only, only the workspace and lictor's own state
+directory are writable, and the network namespace is unshared outright.
+`exs.*` (`lictor/tools/exs.py`) runs **this repository's own checked-in
+scripts** -- `make`, `tests/run.sh`, `trvthnvke verify` -- via
+`nix develop -c`, and the entire point of those tools is that their
+PASS/FAIL matches what a human gets running the same command at a
+terminal. Sandboxing `exs.*` would risk making that comparison a lie, and
+`nix develop` additionally needs the Nix daemon's socket, which a
+sandboxed process does not have unless it is explicitly bound in --
+**[OPEN]** whether that can be made to work at all, or whether a
+once-per-session unsandboxed `nix print-dev-env` capture is the better
+route; see `sandbox.py`'s module docstring for the full statement of what
+is untried. So `exs.*` keeps running exactly as the operator would run
+it, unsandboxed, the same way Claude Code's own built-in `Bash` tool
+keeps its own separate sandbox story that lictor does not touch or
+duplicate.
+
+`sandbox.wrap`'s flag set (`--ro-bind / /`, a `--tmpfs /tmp`, a `--bind`
+per writable path, `--unshare-net` unless the caller opts in,
+`--unshare-pid`, `--unshare-ipc`, `--unshare-uts`, `--die-with-parent`,
+`--new-session`) and the empirical findings behind it -- that
+`/nix/store` stays readable, that a real `socket.create_connection`
+fails, and the non-obvious one, that `os.killpg` on the outer `bwrap`
+process's pgid still reaps the whole sandboxed tree only *because*
+`--die-with-parent` is present (`bwrap` forks an inner monitor into a
+second, distinct process group that `killpg` does not reach directly) --
+are documented where they are enforced: the module docstrings of
+`lictor/sandbox.py` and `lictor/workers.py`.

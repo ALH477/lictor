@@ -152,6 +152,8 @@ def main(argv: list[str] | None = None) -> int:
     from lictor import overlay as overlay_mod
     from lictor import recovery as recovery_mod
     from lictor.image import Image
+    from lictor.roles import load as load_roles
+    from lictor.roles import summary as roles_summary
     from lictor.tools import ToolContext
     from lictor.tools import load as load_tools
     from lictor.vault import Vault
@@ -188,9 +190,15 @@ def main(argv: list[str] | None = None) -> int:
         for skip in replayed.skipped:
             print(f"· overlay seq {skip.seq} ({skip.target}) skipped: {skip.message}")
 
+    # Child roles from the user's config and the workspace's .lictor/agents.
+    # In recovery nothing user-supplied is loaded, roles included: a bad role
+    # file is one of the things a recovery boot exists to let you fix.
+    roles = {} if decision.recovery else load_roles(cfg, paths)
+
     brain = Brain(
         cfg, state, records, approvals, renderer,
         registry=registry, hooks=session_hooks,
+        agents=roles or None,
     )
     app = App(cfg, state, records, approvals, brain, renderer, image=image, vault=vault)
     tool_ctx.app = app
@@ -204,6 +212,8 @@ def main(argv: list[str] | None = None) -> int:
         applied = len(replayed.applied) if replayed is not None else 0
         print(f"· generation {generation}, {applied} overlay entr"
               f"{'y' if applied == 1 else 'ies'} applied")
+    if roles:
+        print(f"· roles {len(roles)}: {roles_summary(roles).splitlines()[0][:60]}")
     summary = vault.summary()
     if summary:
         print(f"· vault: {summary} -- /vault, /vault-restore, /vault-discard")
