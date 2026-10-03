@@ -92,6 +92,19 @@ class OllamaConfig:
 
 
 @dataclass
+class LocalConfig:
+    """The small fine-tuned local subagent Claude leads (lictor/local.py).
+    `host` empty means [ollama].host."""
+
+    enabled: bool = False
+    model: str = "exsecutor-3b"
+    host: str = ""
+    timeout_s: int = 120
+    max_calls: int = 40
+    max_tokens: int = 1024
+
+
+@dataclass
 class RlmConfig:
     turn_budget: int = 40
     concurrency: int = 3
@@ -114,6 +127,7 @@ class Config:
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
     claude: ClaudeConfig = field(default_factory=ClaudeConfig)
     ollama: OllamaConfig = field(default_factory=OllamaConfig)
+    local: LocalConfig = field(default_factory=LocalConfig)
     rlm: RlmConfig = field(default_factory=RlmConfig)
     exs: ExsConfig = field(default_factory=ExsConfig)
     sandbox: SandboxConfig = field(default_factory=SandboxConfig)
@@ -174,6 +188,7 @@ def _apply_toml(cfg: Config, path: Path) -> None:
         ("workspace", cfg.workspace),
         ("claude", cfg.claude),
         ("ollama", cfg.ollama),
+        ("local", cfg.local),
         ("rlm", cfg.rlm),
         ("exs", cfg.exs),
         ("sandbox", cfg.sandbox),

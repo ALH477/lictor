@@ -140,6 +140,23 @@ to start with the fix (`ollama pull ...`) if not. A bare `--ollama` uses
 the configured model; `--model` still wins. Whether a given local model
 handles Claude Code's tool use well is [UNTESTED] here.
 
+### A local fine-tuned subagent Claude leads
+
+`local.ask` delegates a narrow job (a first-draft fixture, a file summary,
+extraction from text Claude hands it) to a small fine-tuned model served by
+Ollama -- by default a model named `exsecutor-3b`, which you supply; lictor
+does not ship or train it. Enable it with `[local] enabled = true` (also
+`model`, `host`, `timeout_s`, `max_calls`, `max_tokens`) in `config.toml`.
+It is independent of `--ollama`: Claude can run on the subscription while
+this model runs locally. The subagent has no tools and no memory, sees only
+the prompt and the workspace files named in `context` (paths outside the
+workspace are refused), and every result is marked `unverified` -- Claude
+leads and checks it against the spec or the gate. Calls are capped per
+session and traced to `resource.read("inference:loc-...")`. `local.status`
+reports reachability. Exercised against a stand-in HTTP server in the test
+suite only; against a real Ollama and a real Exsecutor tune it is
+[UNTESTED], and so is the tune's quality.
+
 State lives under XDG-ish directories, `lictor` appended:
 `$XDG_STATE_HOME/lictor/` (conversation records, the vault, the overlay
 journal, generations, crash reports, artifacts, the private

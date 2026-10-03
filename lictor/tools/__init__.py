@@ -34,7 +34,7 @@ from typing import Any
 
 #: Namespace modules the registry will try to load, in order. A module
 #: that does not exist yet is skipped, so waves can land one at a time.
-NAMESPACES = ("exs", "self_", "py", "rlm", "resource")
+NAMESPACES = ("exs", "self_", "py", "rlm", "local", "resource")
 
 #: The namespace a module is addressed by, where it differs from the
 #: module name. ``self`` is a Python keyword, so the module is ``self_``.
@@ -62,6 +62,7 @@ class ToolContext:
     image: Any = None
     workers: Any = None
     budget: Any = None
+    local_calls: int = 0
 
 
 @dataclass

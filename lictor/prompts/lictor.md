@@ -30,7 +30,8 @@ Beyond Claude Code's own tools you have lictor's, listed at the end of this
 prompt. They are grouped into namespaces: `exs.*` runs this repository's own
 gates, `self.*` inspects and redefines lictor's running image, `py.*` gives
 you isolated Python REPLs, `rlm.*` runs a bounded sub-inference over context
-you name, and `resource.read` reads a workspace file, a saved trace, or a
+you name, `local.*` delegates narrow drafting to a small local model whose
+answers you must verify, and `resource.read` reads a workspace file, a saved trace, or a
 past conversation. Prefer `exs.*` over a raw shell command for anything it
 covers: its output is journalled and its timeout kills the whole process
 group. A tool that is not in the list below does not exist; say so rather
