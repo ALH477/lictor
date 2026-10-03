@@ -48,6 +48,13 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--effort", help="override the configured effort level")
     parser.add_argument("--mode", help="override the configured permission mode")
     parser.add_argument(
+        "--ollama",
+        nargs="?",
+        const="",
+        metavar="MODEL",
+        help="run inference on a local Ollama server ([ollama] in config.toml); optional MODEL overrides it",
+    )
+    parser.add_argument(
         "--recovery",
         action="store_true",
         help="boot with no overlay and no user init, to diagnose a broken image",
@@ -102,7 +109,17 @@ def main(argv: list[str] | None = None) -> int:
     paths.ensure()
 
     cfg = config_mod.Config.load(paths, workspace_override=args.workspace)
-    cfg.apply_cli_overrides(model=args.model, effort=args.effort, mode=args.mode)
+    cfg.apply_cli_overrides(model=args.model, effort=args.effort, mode=args.mode, ollama=args.ollama)
+
+    ollama_status = None
+    if cfg.ollama.enabled:
+        from . import ollama as ollama_mod
+
+        try:
+            ollama_status = ollama_mod.preflight(cfg)
+        except ollama_mod.OllamaError as exc:
+            print(f"lictor: {exc}", file=sys.stderr)
+            return 1
 
     workspace = Path(cfg.workspace.path).resolve()
 
@@ -127,7 +144,8 @@ def main(argv: list[str] | None = None) -> int:
             "claude": claude_version,
             "cwd": str(workspace),
             "worktree": None,
-            "model": cfg.claude.model or None,
+            "model": (cfg.ollama.model if cfg.ollama.enabled else None) or cfg.claude.model or None,
+            "backend": "ollama" if cfg.ollama.enabled else "claude",
             "effort": cfg.claude.effort,
             "generation": 0,
             "recovery": False,
@@ -140,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
         active_worktree=None,
         cid=cid,
         claude_session=resume_target,
-        model=cfg.claude.model or None,
+        model=(cfg.ollama.model if cfg.ollama.enabled else None) or cfg.claude.model or None,
         effort=cfg.claude.effort,
         mode=cfg.claude.permission_mode,
     )
@@ -207,6 +225,8 @@ def main(argv: list[str] | None = None) -> int:
         f"lictor {__version__} · claude {claude_version} · sdk {sdk_version} "
         f"· workspace {workspace} · cid {cid}"
     )
+    if ollama_status:
+        print(f"· {ollama_status}")
     print(f"· tools {len(registry.tools)} in {len(registry.namespaces())} namespaces")
     if generation:
         applied = len(replayed.applied) if replayed is not None else 0

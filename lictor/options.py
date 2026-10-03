@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from . import ollama as ollama_mod
+
 #: Keys removed outright regardless of prefix.
 SCRUB_KEYS = ("CLAUDECODE", "CLAUDE_PID", "CLAUDE_EFFORT", "ANTHROPIC_API_KEY")
 #: Prefix removed unless the key is in SCRUB_KEEP.
@@ -124,9 +126,9 @@ def build_options(
         "cli_path": cfg.resolve_cli_path(),
         "include_partial_messages": True,
         "permission_mode": cfg.claude.permission_mode,
-        "model": cfg.claude.model or None,
+        "model": (ollama_mod.effective_model(cfg) if cfg.ollama.enabled else cfg.claude.model) or None,
         "effort": cfg.claude.effort,
-        "env": {"MCP_TIMEOUT": "120000"},
+        "env": {"MCP_TIMEOUT": "120000", **ollama_mod.backend_env(cfg)},
         "allowed_tools": allowed_tools,
     }
     if hooks is not None:
