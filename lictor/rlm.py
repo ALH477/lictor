@@ -34,6 +34,8 @@ from typing import Any
 
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
+from . import ollama as ollama_mod
+
 #: A context file bigger than this is refused outright, never silently
 #: truncated -- see _load_context.
 MAX_CONTEXT_FILE_BYTES = 256 * 1024
@@ -195,6 +197,10 @@ async def infer(
 
     rlm_cfg = ctx.cfg.rlm
     effective_model = model or (getattr(rlm_cfg, "model", None) or None)
+    ollama_cfg = getattr(ctx.cfg, "ollama", None)
+    if ollama_cfg is not None and ollama_cfg.enabled:
+        # The local server has no "haiku"; run on the one Ollama model.
+        effective_model = ollama_mod.effective_model(ctx.cfg) or effective_model
 
     full_prompt = prompt if not context_text else f"{prompt}\n\n{context_text}"
     options_kwargs: dict[str, Any] = {
@@ -209,6 +215,9 @@ async def infer(
         "model": effective_model,
         "effort": effort,
     }
+    backend = ollama_mod.backend_env(ctx.cfg) if ollama_cfg is not None else {}
+    if backend:
+        options_kwargs["env"] = backend
     if schema is not None:
         options_kwargs["output_format"] = {"type": "json_schema", "schema": schema}
     options = ClaudeAgentOptions(**options_kwargs)

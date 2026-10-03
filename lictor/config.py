@@ -82,6 +82,16 @@ class ClaudeConfig:
 
 
 @dataclass
+class OllamaConfig:
+    """Run inference on a local Ollama server instead of the subscription
+    login. Off by default; see lictor/ollama.py."""
+
+    enabled: bool = False
+    host: str = "http://localhost:11434"
+    model: str = ""
+
+
+@dataclass
 class RlmConfig:
     turn_budget: int = 40
     concurrency: int = 3
@@ -103,6 +113,7 @@ class SandboxConfig:
 class Config:
     workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig)
     claude: ClaudeConfig = field(default_factory=ClaudeConfig)
+    ollama: OllamaConfig = field(default_factory=OllamaConfig)
     rlm: RlmConfig = field(default_factory=RlmConfig)
     exs: ExsConfig = field(default_factory=ExsConfig)
     sandbox: SandboxConfig = field(default_factory=SandboxConfig)
@@ -129,6 +140,7 @@ class Config:
         model: str | None = None,
         effort: str | None = None,
         mode: str | None = None,
+        ollama: str | None = None,
     ) -> None:
         """CLI flags win over every config file. Call after :meth:`load`."""
         if workspace is not None:
@@ -139,6 +151,11 @@ class Config:
             self.claude.effort = effort
         if mode is not None:
             self.claude.permission_mode = mode
+        if ollama is not None:
+            # "" means bare --ollama: enable, keep the configured model.
+            self.ollama.enabled = True
+            if ollama:
+                self.ollama.model = ollama
 
     def resolve_cli_path(self) -> str | None:
         """``$LICTOR_CLAUDE`` wins, then the config value, then ``PATH``."""
@@ -156,6 +173,7 @@ def _apply_toml(cfg: Config, path: Path) -> None:
     for section_name, section_obj in (
         ("workspace", cfg.workspace),
         ("claude", cfg.claude),
+        ("ollama", cfg.ollama),
         ("rlm", cfg.rlm),
         ("exs", cfg.exs),
         ("sandbox", cfg.sandbox),

@@ -127,6 +127,19 @@ it is refused by default rather than silently tolerated. `--force` exists
 for exactly the cases where an operator has decided that risk is theirs to
 take.
 
+### Running on local Ollama
+
+`lictor --ollama MODEL` (or `[ollama] enabled = true`, `model = "..."` in
+`config.toml`) points the `claude` binary at an Ollama server instead of
+the subscription login: `ANTHROPIC_BASE_URL` is set to the Ollama host
+(default `http://localhost:11434`, `[ollama].host`), `ANTHROPIC_API_KEY`
+is emptied, and every model alias (`opus`, `sonnet`, `haiku`, so `rlm.*`
+and role files too) resolves to the one Ollama model. At boot lictor asks
+the server's `/api/tags` whether it is up and has the model, and refuses
+to start with the fix (`ollama pull ...`) if not. A bare `--ollama` uses
+the configured model; `--model` still wins. Whether a given local model
+handles Claude Code's tool use well is [UNTESTED] here.
+
 State lives under XDG-ish directories, `lictor` appended:
 `$XDG_STATE_HOME/lictor/` (conversation records, the vault, the overlay
 journal, generations, crash reports, artifacts, the private

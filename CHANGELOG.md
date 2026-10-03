@@ -12,6 +12,7 @@ carries its evidence; `README.md`'s Evidence section is the ledger.
 | M1 | the REPL, the brain, append-only records, approvals | `4e31e30` |
 | M2 | the `exs.*` tools, the edit and shell fences | `b0d5bcd` |
 | M4 | `py.*` worker REPLs, `rlm.*` bounded inference, the vault | `1ee3e6a` |
+| — | `--ollama`: local Ollama as the inference backend | (this change) |
 | — | registry wiring; the prompt stopped claiming tools were absent | `62f3aa4` |
 | M3 | the live image, overlay generations, recovery | `75b30ce` |
 | — | wiring the image into the launcher and the REPL | `140a42c` |
